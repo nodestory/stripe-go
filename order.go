@@ -30,11 +30,29 @@ type OrderItemType string
 
 // List of values that OrderItemType can take.
 const (
+	OrderItemTypeCoupon   OrderItemType = "coupon"
 	OrderItemTypeDiscount OrderItemType = "discount"
 	OrderItemTypeShipping OrderItemType = "shipping"
 	OrderItemTypeSKU      OrderItemType = "sku"
 	OrderItemTypeTax      OrderItemType = "tax"
 )
+
+// OrderItemParentType represents the type of order item parent
+type OrderItemParentType string
+
+// List of values that OrderItemParentType can take.
+const (
+	OrderItemParentTypeCoupon   OrderItemParentType = "coupon"
+	OrderItemParentTypeShipping OrderItemParentType = "shipping"
+	OrderItemParentTypeSKU      OrderItemParentType = "sku"
+)
+
+// OrderItemParent describes the parent of an order item.
+type OrderItemParent struct {
+	ID   string              `json:"-"`
+	SKU  *SKU                `json:"-"`
+	Type OrderItemParentType `json:"-"`
+}
 
 // OrderParams is the set of parameters that can be used when creating an order.
 type OrderParams struct {
@@ -176,12 +194,12 @@ type OrderItemParams struct {
 
 // OrderItem is the resource representing an order item.
 type OrderItem struct {
-	Amount      int64         `json:"amount"`
-	Currency    Currency      `json:"currency"`
-	Description string        `json:"description"`
-	Parent      string        `json:"parent"`
-	Quantity    int64         `json:"quantity"`
-	Type        OrderItemType `json:"type"`
+	Amount      int64            `json:"amount"`
+	Currency    Currency         `json:"currency"`
+	Description string           `json:"description"`
+	Parent      *OrderItemParent `json:"-"`
+	Quantity    int64            `json:"quantity"`
+	Type        OrderItemType    `json:"type"`
 }
 
 // SetSource adds valid sources to a OrderParams object,
@@ -189,6 +207,46 @@ type OrderItem struct {
 func (op *OrderPayParams) SetSource(sp interface{}) error {
 	source, err := SourceParamsFor(sp)
 	op.Source = source
+	return err
+}
+
+// UnmarshalJSON handles deserialization of an OrderItem.
+// This custom unmarshaling is needed because the resulting
+// Parent property may be an id or a full SKU struct when parent is expanded.
+func (oi *OrderItem) UnmarshalJSON(data []byte) error {
+	type orderItem OrderItem
+	var v orderItem
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+
+	var err error
+	*oi = OrderItem(v)
+	oi.Parent = &OrderItemParent{}
+
+	// Unmarshal data a second time so that we can get the raw bytes for the
+	// `value` field
+	var rawObject map[string]*json.RawMessage
+	if err := json.Unmarshal(data, &rawObject); err != nil {
+		return err
+	}
+
+	switch oi.Type {
+	case OrderItemTypeCoupon:
+		if err = json.Unmarshal(*rawObject["parent"], &oi.Parent.ID); err != nil {
+			oi.Parent.Type = OrderItemParentTypeCoupon
+		}
+	case OrderItemTypeShipping:
+		if err = json.Unmarshal(*rawObject["parent"], &oi.Parent.ID); err != nil {
+			oi.Parent.Type = OrderItemParentTypeShipping
+		}
+	case OrderItemTypeSKU:
+		if err = json.Unmarshal(*rawObject["parent"], &oi.Parent.SKU); err != nil {
+			oi.Parent.ID = oi.Parent.SKU.ID
+			oi.Parent.Type = OrderItemParentTypeSKU
+		}
+	}
+
 	return err
 }
 

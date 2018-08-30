@@ -29,6 +29,51 @@ func TestOrder_UnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestOrderItem_UnmarshalJSON(t *testing.T) {
+	orderItemData := map[string]interface{}{
+		"object": "order_item",
+		"amount": 123,
+		"parent": map[string]interface{}{
+			"id":     "TEST-SKU-123",
+			"object": "sku",
+		},
+		"type": "sku",
+	}
+	bytes, err := json.Marshal(&orderItemData)
+	assert.NoError(t, err)
+
+	var orderItem OrderItem
+	err = json.Unmarshal(bytes, &orderItem)
+	assert.NoError(t, err)
+	assert.Equal(t, "TEST-SKU-123", orderItem.Parent.SKU.ID)
+
+	orderItemData = map[string]interface{}{
+		"object": "order_item",
+		"amount": 0,
+		"parent": "TEST-COUPON-123",
+		"type":   "coupon",
+	}
+	bytes, err = json.Marshal(&orderItemData)
+	assert.NoError(t, err)
+
+	err = json.Unmarshal(bytes, &orderItem)
+	assert.NoError(t, err)
+	assert.Equal(t, "TEST-COUPON-123", orderItem.Parent.ID)
+
+	orderItemData = map[string]interface{}{
+		"object": "order_item",
+		"amount": 1000,
+		"parent": "ship_MZmIpV7v14QZLlRR",
+		"type":   "shipping",
+	}
+	bytes, err = json.Marshal(&orderItemData)
+	assert.NoError(t, err)
+
+	err = json.Unmarshal(bytes, &orderItem)
+	assert.NoError(t, err)
+	assert.Equal(t, "ship_MZmIpV7v14QZLlRR", orderItem.Parent.ID)
+}
+
 func TestOrderUpdateParams_AppendTo(t *testing.T) {
 	{
 		params := &OrderUpdateParams{
